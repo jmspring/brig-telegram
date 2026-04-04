@@ -1,0 +1,20 @@
+[skill]
+name = "telegram-gateway"
+description = "Bridge Telegram messages to Brig"
+kind = "persistent"
+
+[requires]
+network = ["api.telegram.org"]
+max_runtime = "forever"
+
+[persistent]
+rc_name = "brig_telegram"
+entrypoint = "/usr/local/bin/brig-telegram"
+restart_on_failure = true
+depends_on = ["brig"]
+
+[persistent.socket]
+capabilities = ["submit_task", "read_status"]
+
+[secrets]
+telegram_token = { env = "BRIG_TELEGRAM_TOKEN" }
