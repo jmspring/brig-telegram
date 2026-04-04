@@ -57,15 +57,33 @@ Session keys: `tg-{chat_id}-{user_id}`
 ```sh
 cargo build --release
 
-# Manual test
+# Manual test (requires brig daemon running)
 BRIG_TELEGRAM_TOKEN=xxx ./target/release/brig-telegram
-
-# Install as brig skill
-brig skill add ./
-brig secret set telegram-gateway.telegram_token
-brig skill enable telegram-gateway
-service brig_telegram start
 ```
+
+## Install as Brig Persistent Skill
+
+```sh
+# 1. Install binary
+sudo cp target/release/brig-telegram /usr/local/bin/
+
+# 2. Register skill (loads manifest.toml)
+brig skill add ./
+
+# 3. Set secret
+brig secret set telegram-gateway.telegram_token
+
+# 4. Enable (creates jail, rc.d script) — requires root
+sudo brig skill enable telegram-gateway
+
+# 5. Start service
+sudo sysrc brig_telegram_enable=YES
+sudo service brig_telegram start
+```
+
+Note: `brig skill add` only registers the manifest — it doesn't build
+or install the binary. The entrypoint in manifest.toml points to
+`/usr/local/bin/brig-telegram`, which must be installed manually.
 
 ## What Works
 
