@@ -1,0 +1,21 @@
+[skill]
+name = "telegram-support-bot"
+description = "Telegram gateway for support team"
+kind = "persistent"
+
+[requires]
+network = ["api.telegram.org"]
+max_runtime = "forever"
+
+[persistent]
+rc_name = "brig_tg_support"
+entrypoint = "/usr/local/bin/brig-telegram"
+restart_on_failure = true
+depends_on = ["brig"]
+env = { BRIG_GATEWAY_NAME = "telegram-support-bot", BRIG_SESSION_PREFIX = "tg-support" }
+
+[persistent.socket]
+capabilities = ["submit_task", "read_status"]
+
+[secrets]
+telegram_token = { env = "BRIG_TELEGRAM_TOKEN" }

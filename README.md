@@ -89,6 +89,10 @@ The gateway uses Brig's newline-delimited JSON protocol:
 | `BRIG_GATEWAY_NAME` | No | `telegram-gateway` | Gateway identity for brig (audit/logging) |
 | `BRIG_SESSION_PREFIX` | No | `tg` | Session key prefix (e.g., `tg-{chat_id}-{user_id}`) |
 
+## Running Multiple Bots
+
+You can run multiple instances of brig-telegram on the same host, each as a separate Brig persistent skill with its own bot token and session prefix. See [docs/GUIDE.md](docs/GUIDE.md#running-multiple-bots) for setup instructions. Example manifests are in `contrib/`.
+
 ## License
 
 BSD-2-Clause
