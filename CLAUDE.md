@@ -43,7 +43,7 @@ Newline-delimited JSON over unix domain socket:
 ← {"type":"response","content":"response text","session":"tg-CHATID-USERID"}
 ```
 
-Session keys: `tg-{chat_id}-{user_id}`
+Session keys: `{session_prefix}-{chat_id}-{user_id}` (default prefix: `tg`)
 
 ## Environment Variables
 
@@ -51,6 +51,8 @@ Session keys: `tg-{chat_id}-{user_id}`
 |----------|----------|---------|
 | `BRIG_TELEGRAM_TOKEN` | Yes | — |
 | `BRIG_SOCKET` | No | `/var/brig/sock/brig.sock` |
+| `BRIG_GATEWAY_NAME` | No | `telegram-gateway` |
+| `BRIG_SESSION_PREFIX` | No | `tg` |
 
 ## Build & Run
 

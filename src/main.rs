@@ -18,10 +18,10 @@ const POLL_TIMEOUT: u64 = 30;
 // --- Brig socket protocol types ---
 
 #[derive(Serialize)]
-struct BrigHello {
+struct BrigHello<'a> {
     #[serde(rename = "type")]
     msg_type: &'static str,
-    name: &'static str,
+    name: &'a str,
     version: &'static str,
 }
 
@@ -107,7 +107,7 @@ struct BrigConnection {
 }
 
 impl BrigConnection {
-    fn connect(socket_path: &str) -> Result<Self, String> {
+    fn connect(socket_path: &str, gateway_name: &str) -> Result<Self, String> {
         let stream = UnixStream::connect(socket_path)
             .map_err(|e| format!("failed to connect to brig socket at {}: {}", socket_path, e))?;
 
@@ -116,14 +116,14 @@ impl BrigConnection {
         let reader = BufReader::new(stream);
 
         let mut conn = BrigConnection { reader, writer };
-        conn.handshake()?;
+        conn.handshake(gateway_name)?;
         Ok(conn)
     }
 
-    fn handshake(&mut self) -> Result<(), String> {
+    fn handshake(&mut self, gateway_name: &str) -> Result<(), String> {
         let hello = BrigHello {
             msg_type: "hello",
-            name: "telegram-gateway",
+            name: gateway_name,
             version: "0.1.0",
         };
         self.send(&hello)?;
@@ -267,11 +267,18 @@ fn run() -> Result<(), String> {
     let socket_path = env::var("BRIG_SOCKET")
         .unwrap_or_else(|_| DEFAULT_SOCKET.to_string());
 
-    eprintln!("brig-telegram starting");
+    let gateway_name = env::var("BRIG_GATEWAY_NAME")
+        .unwrap_or_else(|_| "telegram-gateway".to_string());
+
+    let session_prefix = env::var("BRIG_SESSION_PREFIX")
+        .unwrap_or_else(|_| "tg".to_string());
+
+    eprintln!("{} starting", gateway_name);
     eprintln!("  socket: {}", socket_path);
+    eprintln!("  session prefix: {}", session_prefix);
 
     let telegram = TelegramClient::new(token);
-    let mut brig = BrigConnection::connect(&socket_path)?;
+    let mut brig = BrigConnection::connect(&socket_path, &gateway_name)?;
     let mut update_offset: i64 = 0;
 
     eprintln!("polling for updates...");
@@ -309,7 +316,7 @@ fn run() -> Result<(), String> {
 
             let user_id = message.from.map(|u| u.id).unwrap_or(0);
             let chat_id = message.chat.id;
-            let session = format!("tg-{}-{}", chat_id, user_id);
+            let session = format!("{}-{}-{}", session_prefix, chat_id, user_id);
 
             eprintln!("[{}] <- {}", session, text);
 
@@ -319,7 +326,7 @@ fn run() -> Result<(), String> {
                 Err(e) => {
                     eprintln!("brig error: {}", e);
                     // Try to reconnect
-                    match BrigConnection::connect(&socket_path) {
+                    match BrigConnection::connect(&socket_path, &gateway_name) {
                         Ok(new_conn) => {
                             brig = new_conn;
                             match brig.submit_task(&text, &session) {

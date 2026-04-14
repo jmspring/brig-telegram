@@ -62,7 +62,7 @@ BRIG_SOCKET=/path/to/brig.sock \
 2. Sends a hello handshake, receives capabilities
 3. Long-polls Telegram's getUpdates API (30s timeout)
 4. For each incoming message:
-   - Creates a session key: `tg-{chat_id}-{user_id}`
+   - Creates a session key: `{session_prefix}-{chat_id}-{user_id}` (default prefix: `tg`)
    - Submits the message text to Brig
    - Waits for Brig's response
    - Sends the response back to the Telegram chat
@@ -86,6 +86,8 @@ The gateway uses Brig's newline-delimited JSON protocol:
 |----------|----------|---------|-------------|
 | `BRIG_TELEGRAM_TOKEN` | Yes | - | Telegram bot token from @BotFather |
 | `BRIG_SOCKET` | No | `/var/brig/sock/brig.sock` | Path to Brig's unix socket |
+| `BRIG_GATEWAY_NAME` | No | `telegram-gateway` | Gateway identity for brig (audit/logging) |
+| `BRIG_SESSION_PREFIX` | No | `tg` | Session key prefix (e.g., `tg-{chat_id}-{user_id}`) |
 
 ## License
 
