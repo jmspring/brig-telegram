@@ -15,32 +15,33 @@ A minimal, synchronous bridge that forwards Telegram messages to Brig's unix dom
 cargo build --release
 ```
 
-## Install as a Brig persistent skill
+## Install
 
 ```sh
-# 1. Build release binary
-cargo build --release
-
-# 2. Install binary to system path
-sudo cp target/release/brig-telegram /usr/local/bin/
-
-# 3. Register skill with brig (loads manifest into registry)
-brig skill add ./
-
-# 4. Set the Telegram token (stored encrypted in ~/.brig/secrets.db)
-brig secret set telegram-gateway.telegram_token
-# (enter your bot token when prompted)
-
-# 5. Enable the skill (creates ZFS dataset, jail.conf, rc.d script)
-sudo brig skill enable telegram-gateway
-
-# 6. Start the service
-sudo sysrc brig_telegram_enable=YES
-sudo service brig_telegram start
+make                     # build release binary
+sudo make install        # install binary + skill manifest
 ```
 
-Note: Steps 5-6 require root. The gateway runs inside a FreeBSD jail
-with network access limited to api.telegram.org.
+This installs:
+- `/usr/local/bin/brig-telegram`
+- `/usr/local/share/brig/skills/telegram-gateway/manifest.toml`
+
+Then enable via brig (jailed, recommended):
+
+```sh
+brig secret set telegram-gateway.telegram_token
+brig skill enable telegram-gateway
+```
+
+Or as a host service (no jail):
+
+```sh
+sudo make install-service
+sudo sysrc brig_telegram_enable=YES
+sudo sysrc brig_telegram_token="your-bot-token"
+sudo sysrc brig_telegram_user="jim"
+sudo service brig_telegram start
+```
 
 ## Manual run (for testing)
 

@@ -114,29 +114,32 @@ Select your bot, then choose "Disable".
 
 For direct-message-only usage, privacy mode doesn't matter.
 
-## Step 2: Build brig-telegram
+## Step 2: Build and Install
 
 ```sh
 cd /path/to/brig-telegram
-cargo build --release
+make                     # build release binary
+sudo make install        # install binary + skill manifest
 ```
 
-The binary is at `target/release/brig-telegram`.
+This installs:
+- `/usr/local/bin/brig-telegram`
+- `/usr/local/share/brig/skills/telegram-gateway/manifest.toml`
 
-## Step 3: Install
+For development, you can also register a local checkout directly:
 
-### Option A: Install as a Brig Persistent Skill (Recommended)
+```sh
+brig skill add ./        # registers manifest from working directory
+```
+
+## Step 3: Enable
+
+### Option A: Jailed Mode (Recommended)
 
 This runs brig-telegram inside a FreeBSD jail with network access restricted
 to api.telegram.org.
 
 ```sh
-# Install the binary where the jail can reach it
-sudo cp target/release/brig-telegram /usr/local/bin/
-
-# Register the skill manifest with brig
-brig skill add /path/to/brig-telegram/
-
 # Store the bot token (encrypted in ~/.brig/secrets.db)
 brig secret set telegram-gateway.telegram_token
 # Paste your bot token when prompted
@@ -161,7 +164,20 @@ View logs via syslog:
 grep brig_telegram /var/log/messages
 ```
 
-### Option B: Run Manually (For Testing)
+### Option B: Host Service (No Jail)
+
+```sh
+sudo make install-service
+sudo sysrc brig_telegram_enable=YES
+sudo sysrc brig_telegram_token="your-bot-token"
+sudo sysrc brig_telegram_user="jim"
+sudo service brig_telegram start
+```
+
+Do not run both jailed and host modes simultaneously with the same session
+prefix.
+
+### Option C: Run Manually (For Testing)
 
 ```sh
 export BRIG_TELEGRAM_TOKEN="your-bot-token"
@@ -419,7 +435,9 @@ env = { BRIG_GATEWAY_NAME = "telegram-ops-bot", BRIG_SESSION_PREFIX = "tg-ops" }
 
 The `BRIG_SESSION_PREFIX` controls the session key format
 (`{prefix}-{chat_id}-{user_id}`), so each bot's conversations are isolated
-in Brig's session store.
+in Brig's session store.  The prefix value does not need to be registered
+with brig — any prefix works as long as the session key has 3+ hyphen-delimited
+segments (which it always does with this format).
 
 Copy and edit a manifest from `contrib/` if you need different settings.
 
@@ -476,6 +494,12 @@ Each bot uses a different session prefix (`tg-ops`, `tg-support`, etc.),
 so their session keys never collide. A message to the ops bot produces
 session key `tg-ops-12345-67890`, while the same user messaging the
 support bot gets `tg-support-12345-67890`.
+
+Brig derives per-user memory scope from session key structure: any key with
+3+ hyphen-delimited segments is scoped as `{first_segment}-{last_segment}`.
+For example, `tg-ops-12345-67890` produces scope `tg-ops-67890`.  The prefix
+value does not need to be registered with brig — any gateway that produces
+keys with 3+ segments gets per-user scoping automatically.
 
 Memory facts in Brig are scoped per user, not per gateway. If a user tells
 the ops bot "remember that the maintenance window is Friday" and then asks

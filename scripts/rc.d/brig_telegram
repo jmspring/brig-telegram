@@ -1,0 +1,59 @@
+#!/bin/sh
+#
+# PROVIDE: brig_telegram
+# REQUIRE: brig NETWORKING
+# KEYWORD: shutdown
+#
+# Add the following lines to /etc/rc.conf to enable brig-telegram:
+#
+#   brig_telegram_enable="YES"
+#   brig_telegram_token="your-bot-token"
+#   brig_telegram_user="jim"
+#
+# Optional:
+#   brig_telegram_socket="/var/brig/sock/brig.sock"
+#   brig_telegram_name="telegram-gateway"
+#   brig_telegram_prefix="tg"
+
+. /etc/rc.subr
+
+name=brig_telegram
+rcvar=brig_telegram_enable
+
+load_rc_config $name
+
+: ${brig_telegram_enable:="NO"}
+: ${brig_telegram_user:="root"}
+: ${brig_telegram_token:=""}
+: ${brig_telegram_socket:="/var/brig/sock/brig.sock"}
+: ${brig_telegram_name:="telegram-gateway"}
+: ${brig_telegram_prefix:="tg"}
+
+pidfile="/var/run/${name}.pid"
+logfile="/var/log/${name}.log"
+
+command="/usr/sbin/daemon"
+command_args="-f -p ${pidfile} -o ${logfile} -t ${name} \
+    /usr/bin/env \
+    BRIG_TELEGRAM_TOKEN=${brig_telegram_token} \
+    BRIG_SOCKET=${brig_telegram_socket} \
+    BRIG_GATEWAY_NAME=${brig_telegram_name} \
+    BRIG_SESSION_PREFIX=${brig_telegram_prefix} \
+    /usr/local/bin/brig-telegram"
+
+start_precmd="brig_telegram_prestart"
+stop_postcmd="brig_telegram_poststop"
+
+brig_telegram_prestart()
+{
+    if [ -z "${brig_telegram_token}" ]; then
+        err 1 "brig_telegram_token is not set in /etc/rc.conf"
+    fi
+}
+
+brig_telegram_poststop()
+{
+    rm -f ${pidfile}
+}
+
+run_rc_command "$1"

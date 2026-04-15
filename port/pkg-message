@@ -1,0 +1,20 @@
+[
+{ type: install
+  message: <<EOM
+To use brig-telegram in jailed mode (recommended):
+
+    brig secret set telegram-gateway.telegram_token
+    brig skill enable telegram-gateway
+
+To use brig-telegram as a host service instead:
+
+    sudo make install-service    # from the source directory
+    sysrc brig_telegram_enable=YES
+    sysrc brig_telegram_token="your-bot-token"
+    sysrc brig_telegram_user="jim"
+    service brig_telegram start
+
+Do not run both modes simultaneously with the same session prefix.
+EOM
+}
+]

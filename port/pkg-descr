@@ -1,0 +1,4 @@
+Telegram Bot API gateway for Brig.  Bridges Telegram messages to Brig's
+unix domain socket for LLM-driven task execution.
+
+Synchronous.  No async runtime.  No Telegram bot framework.
