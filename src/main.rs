@@ -101,7 +101,36 @@ struct SendMessage {
     parse_mode: Option<&'static str>,
 }
 
+const MAX_MESSAGE_BYTES: usize = 1_048_576; // 1 MB
+
 // --- Brig socket connection ---
+
+/// Read a single newline-terminated line with an upper bound on total bytes.
+/// Prevents a malicious or buggy peer from exhausting memory.
+fn read_line_bounded(reader: &mut BufReader<UnixStream>, max_bytes: usize) -> Result<String, String> {
+    let mut line = String::new();
+    loop {
+        let available = reader.fill_buf()
+            .map_err(|e| format!("read error: {}", e))?;
+        if available.is_empty() {
+            if line.is_empty() {
+                return Err("connection closed".into());
+            }
+            return Ok(line);
+        }
+        if let Some(pos) = available.iter().position(|&b| b == b'\n') {
+            line.push_str(&String::from_utf8_lossy(&available[..=pos]));
+            reader.consume(pos + 1);
+            return Ok(line);
+        }
+        if line.len() + available.len() > max_bytes {
+            return Err(format!("message exceeds {} byte limit", max_bytes));
+        }
+        line.push_str(&String::from_utf8_lossy(available));
+        let len = available.len();
+        reader.consume(len);
+    }
+}
 
 struct BrigConnection {
     reader: BufReader<UnixStream>,
@@ -112,6 +141,11 @@ impl BrigConnection {
     fn connect(socket_path: &str, gateway_name: &str, brig_token: &Option<String>) -> Result<Self, String> {
         let stream = UnixStream::connect(socket_path)
             .map_err(|e| format!("failed to connect to brig socket at {}: {}", socket_path, e))?;
+
+        stream.set_read_timeout(Some(Duration::from_secs(300)))
+            .map_err(|e| format!("failed to set read timeout: {}", e))?;
+        stream.set_write_timeout(Some(Duration::from_secs(30)))
+            .map_err(|e| format!("failed to set write timeout: {}", e))?;
 
         let writer = stream.try_clone()
             .map_err(|e| format!("failed to clone socket: {}", e))?;
@@ -155,12 +189,7 @@ impl BrigConnection {
     }
 
     fn recv<T: for<'de> Deserialize<'de>>(&mut self) -> Result<T, String> {
-        let mut line = String::new();
-        self.reader.read_line(&mut line)
-            .map_err(|e| format!("failed to read from socket: {}", e))?;
-        if line.is_empty() {
-            return Err("socket closed".to_string());
-        }
+        let line = read_line_bounded(&mut self.reader, MAX_MESSAGE_BYTES)?;
         serde_json::from_str(&line)
             .map_err(|e| format!("failed to parse message: {} (line: {})", e, line.trim()))
     }
@@ -276,6 +305,7 @@ fn run() -> Result<(), String> {
         eprintln!("  BRIG_SOCKET           Socket path (default: ~/.brig/sock/brig.sock)");
         eprintln!("  BRIG_GATEWAY_NAME     Gateway name (default: telegram-gateway)");
         eprintln!("  BRIG_SESSION_PREFIX   Session prefix (default: tg)");
+        eprintln!("  BRIG_TELEGRAM_ALLOWED_USERS  Comma-separated Telegram user IDs (optional)");
         std::process::exit(0);
     }
     if args.iter().any(|a| a == "--version" || a == "-V") {
@@ -311,9 +341,18 @@ fn run() -> Result<(), String> {
     let session_prefix = env::var("BRIG_SESSION_PREFIX")
         .unwrap_or_else(|_| "tg".to_string());
 
+    let allowed_users: Option<Vec<i64>> = env::var("BRIG_TELEGRAM_ALLOWED_USERS")
+        .ok()
+        .map(|s| s.split(',').filter_map(|id| id.trim().parse().ok()).collect());
+
     eprintln!("{} starting", gateway_name);
     eprintln!("  socket: {}", socket_path);
     eprintln!("  session prefix: {}", session_prefix);
+    if let Some(ref users) = allowed_users {
+        eprintln!("  allowed users: {:?}", users);
+    } else {
+        eprintln!("  allowed users: all (no allowlist set)");
+    }
 
     let telegram = TelegramClient::new(token);
     let mut brig = BrigConnection::connect(&socket_path, &gateway_name, &brig_token)?;
@@ -342,6 +381,14 @@ fn run() -> Result<(), String> {
             // Skip messages from bots
             if let Some(ref user) = message.from {
                 if user.is_bot {
+                    continue;
+                }
+            }
+
+            // Enforce user allowlist
+            if let Some(ref allowed) = allowed_users {
+                let user_id = message.from.as_ref().map(|u| u.id).unwrap_or(0);
+                if !allowed.contains(&user_id) {
                     continue;
                 }
             }
