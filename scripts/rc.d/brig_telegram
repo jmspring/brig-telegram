@@ -11,6 +11,7 @@
 #   brig_telegram_user="jim"
 #
 # Optional:
+#   brig_telegram_brig_token=""
 #   brig_telegram_socket="/var/brig/sock/brig.sock"
 #   brig_telegram_name="telegram-gateway"
 #   brig_telegram_prefix="tg"
@@ -25,35 +26,42 @@ load_rc_config $name
 : ${brig_telegram_enable:="NO"}
 : ${brig_telegram_user:="root"}
 : ${brig_telegram_token:=""}
+: ${brig_telegram_brig_token:=""}
 : ${brig_telegram_socket:="/var/brig/sock/brig.sock"}
 : ${brig_telegram_name:="telegram-gateway"}
 : ${brig_telegram_prefix:="tg"}
 
 pidfile="/var/run/${name}.pid"
 logfile="/var/log/${name}.log"
+envfile="/var/run/${name}.env"
 
 command="/usr/sbin/daemon"
 command_args="-f -p ${pidfile} -o ${logfile} -t ${name} \
-    /usr/bin/env \
-    BRIG_TELEGRAM_TOKEN=${brig_telegram_token} \
-    BRIG_SOCKET=${brig_telegram_socket} \
-    BRIG_GATEWAY_NAME=${brig_telegram_name} \
-    BRIG_SESSION_PREFIX=${brig_telegram_prefix} \
-    /usr/local/bin/brig-telegram"
+    /bin/sh -c '. ${envfile} && exec /usr/local/bin/brig-telegram'"
 
-start_precmd="brig_telegram_prestart"
+start_precmd="brig_telegram_start_precmd"
 stop_postcmd="brig_telegram_poststop"
 
-brig_telegram_prestart()
+brig_telegram_start_precmd()
 {
     if [ -z "${brig_telegram_token}" ]; then
         err 1 "brig_telegram_token is not set in /etc/rc.conf"
     fi
+
+    install -m 0600 /dev/null "${envfile}"
+    echo "BRIG_TELEGRAM_TOKEN=${brig_telegram_token}" > "${envfile}"
+    if [ -n "${brig_telegram_brig_token}" ]; then
+        echo "BRIG_TOKEN=${brig_telegram_brig_token}" >> "${envfile}"
+    fi
+    echo "BRIG_SOCKET=${brig_telegram_socket}" >> "${envfile}"
+    echo "BRIG_GATEWAY_NAME=${brig_telegram_name}" >> "${envfile}"
+    echo "BRIG_SESSION_PREFIX=${brig_telegram_prefix}" >> "${envfile}"
 }
 
 brig_telegram_poststop()
 {
     rm -f ${pidfile}
+    rm -f ${envfile}
 }
 
 run_rc_command "$1"

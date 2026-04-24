@@ -23,6 +23,8 @@ struct BrigHello<'a> {
     msg_type: &'static str,
     name: &'a str,
     version: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    token: Option<&'a str>,
 }
 
 #[derive(Deserialize)]
@@ -107,7 +109,7 @@ struct BrigConnection {
 }
 
 impl BrigConnection {
-    fn connect(socket_path: &str, gateway_name: &str) -> Result<Self, String> {
+    fn connect(socket_path: &str, gateway_name: &str, brig_token: &Option<String>) -> Result<Self, String> {
         let stream = UnixStream::connect(socket_path)
             .map_err(|e| format!("failed to connect to brig socket at {}: {}", socket_path, e))?;
 
@@ -116,15 +118,16 @@ impl BrigConnection {
         let reader = BufReader::new(stream);
 
         let mut conn = BrigConnection { reader, writer };
-        conn.handshake(gateway_name)?;
+        conn.handshake(gateway_name, brig_token)?;
         Ok(conn)
     }
 
-    fn handshake(&mut self, gateway_name: &str) -> Result<(), String> {
+    fn handshake(&mut self, gateway_name: &str, brig_token: &Option<String>) -> Result<(), String> {
         let hello = BrigHello {
             msg_type: "hello",
             name: gateway_name,
             version: "0.1.0",
+            token: brig_token.as_deref(),
         };
         self.send(&hello)?;
 
@@ -261,11 +264,46 @@ impl TelegramClient {
 // --- Main loop ---
 
 fn run() -> Result<(), String> {
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        eprintln!("brig-telegram — Telegram Bot API gateway for Brig");
+        eprintln!();
+        eprintln!("Usage: brig-telegram");
+        eprintln!();
+        eprintln!("Environment variables:");
+        eprintln!("  BRIG_TELEGRAM_TOKEN   Telegram bot token (required)");
+        eprintln!("  BRIG_TOKEN            Brig IPC authentication token (required)");
+        eprintln!("  BRIG_SOCKET           Socket path (default: ~/.brig/sock/brig.sock)");
+        eprintln!("  BRIG_GATEWAY_NAME     Gateway name (default: telegram-gateway)");
+        eprintln!("  BRIG_SESSION_PREFIX   Session prefix (default: tg)");
+        std::process::exit(0);
+    }
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        println!("brig-telegram {}", env!("CARGO_PKG_VERSION"));
+        std::process::exit(0);
+    }
+
     let token = env::var("BRIG_TELEGRAM_TOKEN")
         .map_err(|_| "BRIG_TELEGRAM_TOKEN environment variable not set")?;
 
-    let socket_path = env::var("BRIG_SOCKET")
-        .unwrap_or_else(|_| DEFAULT_SOCKET.to_string());
+    let brig_token = match env::var("BRIG_TOKEN") {
+        Ok(t) => Some(t),
+        Err(_) => {
+            eprintln!("warning: BRIG_TOKEN not set — generate one with: brig token create telegram-gateway");
+            None
+        }
+    };
+
+    let socket_path = env::var("BRIG_SOCKET").unwrap_or_else(|_| {
+        // Try user-local path first (matches brig default), fall back to system path
+        let home = env::var("HOME").unwrap_or_else(|_| "/root".into());
+        let user_path = format!("{}/.brig/sock/brig.sock", home);
+        if std::path::Path::new(&user_path).exists() {
+            user_path
+        } else {
+            DEFAULT_SOCKET.to_string()
+        }
+    });
 
     let gateway_name = env::var("BRIG_GATEWAY_NAME")
         .unwrap_or_else(|_| "telegram-gateway".to_string());
@@ -278,7 +316,7 @@ fn run() -> Result<(), String> {
     eprintln!("  session prefix: {}", session_prefix);
 
     let telegram = TelegramClient::new(token);
-    let mut brig = BrigConnection::connect(&socket_path, &gateway_name)?;
+    let mut brig = BrigConnection::connect(&socket_path, &gateway_name, &brig_token)?;
     let mut update_offset: i64 = 0;
 
     eprintln!("polling for updates...");
@@ -326,7 +364,7 @@ fn run() -> Result<(), String> {
                 Err(e) => {
                     eprintln!("brig error: {}", e);
                     // Try to reconnect
-                    match BrigConnection::connect(&socket_path, &gateway_name) {
+                    match BrigConnection::connect(&socket_path, &gateway_name, &brig_token) {
                         Ok(new_conn) => {
                             brig = new_conn;
                             match brig.submit_task(&text, &session) {
