@@ -14,6 +14,14 @@ use std::time::Duration;
 const DEFAULT_SOCKET: &str = "/var/brig/sock/brig.sock";
 const TELEGRAM_API: &str = "https://api.telegram.org";
 const POLL_TIMEOUT: u64 = 30;
+const TELEGRAM_MAX_LENGTH: usize = 4096;
+
+// sysexits.h exit codes
+const EX_USAGE: i32 = 64;
+const EX_DATAERR: i32 = 65;
+const EX_UNAVAILABLE: i32 = 69;
+const EX_SOFTWARE: i32 = 70;
+const EX_CONFIG: i32 = 78;
 
 // --- Brig socket protocol types ---
 
@@ -160,7 +168,7 @@ impl BrigConnection {
         let hello = BrigHello {
             msg_type: "hello",
             name: gateway_name,
-            version: "0.1.0",
+            version: env!("CARGO_PKG_VERSION"),
             token: brig_token.as_deref(),
         };
         self.send(&hello)?;
@@ -290,39 +298,67 @@ impl TelegramClient {
     }
 }
 
+// --- Message splitting ---
+
+/// Split a message into chunks that fit within Telegram's 4096-character limit.
+/// Prefers splitting on paragraph boundaries (\n\n), then sentence boundaries (. ),
+/// then hard-cuts at the limit.
+fn split_message(text: &str) -> Vec<&str> {
+    if text.len() <= TELEGRAM_MAX_LENGTH {
+        return vec![text];
+    }
+
+    let mut chunks = Vec::new();
+    let mut remaining = text;
+
+    while !remaining.is_empty() {
+        if remaining.len() <= TELEGRAM_MAX_LENGTH {
+            chunks.push(remaining);
+            break;
+        }
+
+        let search_region = &remaining[..TELEGRAM_MAX_LENGTH];
+
+        // Try paragraph boundary (\n\n)
+        let split_at = search_region.rfind("\n\n").map(|pos| pos + 2)
+            // Try sentence boundary (". " or ".\n")
+            .or_else(|| {
+                search_region.rfind(". ").map(|pos| pos + 2)
+                    .or_else(|| search_region.rfind(".\n").map(|pos| pos + 2))
+            })
+            // Hard-cut at limit
+            .unwrap_or(TELEGRAM_MAX_LENGTH);
+
+        let (chunk, rest) = remaining.split_at(split_at);
+        chunks.push(chunk);
+        remaining = rest;
+    }
+
+    chunks
+}
+
 // --- Main loop ---
 
+fn print_help() {
+    println!("brig-telegram — Telegram Bot API gateway for Brig");
+    println!();
+    println!("Usage: brig-telegram");
+    println!();
+    println!("Environment variables:");
+    println!("  BRIG_TELEGRAM_TOKEN          Telegram bot token (required)");
+    println!("  BRIG_TOKEN                   Brig IPC authentication token (required)");
+    println!("  BRIG_SOCKET                  Socket path (default: ~/.brig/sock/brig.sock)");
+    println!("  BRIG_GATEWAY_NAME            Gateway name (default: telegram-gateway)");
+    println!("  BRIG_SESSION_PREFIX           Session prefix (default: tg)");
+    println!("  BRIG_TELEGRAM_ALLOWED_USERS  Comma-separated Telegram user IDs (optional)");
+}
+
 fn run() -> Result<(), String> {
-    let args: Vec<String> = std::env::args().collect();
-    if args.iter().any(|a| a == "--help" || a == "-h") {
-        eprintln!("brig-telegram — Telegram Bot API gateway for Brig");
-        eprintln!();
-        eprintln!("Usage: brig-telegram");
-        eprintln!();
-        eprintln!("Environment variables:");
-        eprintln!("  BRIG_TELEGRAM_TOKEN   Telegram bot token (required)");
-        eprintln!("  BRIG_TOKEN            Brig IPC authentication token (required)");
-        eprintln!("  BRIG_SOCKET           Socket path (default: ~/.brig/sock/brig.sock)");
-        eprintln!("  BRIG_GATEWAY_NAME     Gateway name (default: telegram-gateway)");
-        eprintln!("  BRIG_SESSION_PREFIX   Session prefix (default: tg)");
-        eprintln!("  BRIG_TELEGRAM_ALLOWED_USERS  Comma-separated Telegram user IDs (optional)");
-        std::process::exit(0);
-    }
-    if args.iter().any(|a| a == "--version" || a == "-V") {
-        println!("brig-telegram {}", env!("CARGO_PKG_VERSION"));
-        std::process::exit(0);
-    }
-
     let token = env::var("BRIG_TELEGRAM_TOKEN")
-        .map_err(|_| "BRIG_TELEGRAM_TOKEN environment variable not set")?;
+        .map_err(|_| "BRIG_TELEGRAM_TOKEN not set — get one from @BotFather on Telegram")?;
 
-    let brig_token = match env::var("BRIG_TOKEN") {
-        Ok(t) => Some(t),
-        Err(_) => {
-            eprintln!("warning: BRIG_TOKEN not set — generate one with: brig token create telegram-gateway");
-            None
-        }
-    };
+    let brig_token = Some(env::var("BRIG_TOKEN")
+        .map_err(|_| "BRIG_TOKEN not set — generate one with: brig token create telegram-gateway")?);
 
     let socket_path = env::var("BRIG_SOCKET").unwrap_or_else(|_| {
         // Try user-local path first (matches brig default), fall back to system path
@@ -426,17 +462,52 @@ fn run() -> Result<(), String> {
 
             eprintln!("[{}] -> {} chars", session, response.len());
 
-            // Send response back to Telegram
-            if let Err(e) = telegram.send_message(chat_id, &response) {
-                eprintln!("failed to send response: {}", e);
+            // Send response back to Telegram, splitting if needed
+            for chunk in split_message(&response) {
+                if let Err(e) = telegram.send_message(chat_id, chunk) {
+                    eprintln!("failed to send response: {}", e);
+                    break;
+                }
             }
         }
     }
 }
 
+fn exit_code_for(error: &str) -> i32 {
+    if error.contains("not set") {
+        EX_CONFIG
+    } else if error.contains("failed to connect") || error.contains("unavailable") {
+        EX_UNAVAILABLE
+    } else if error.contains("failed to parse") {
+        EX_DATAERR
+    } else {
+        EX_SOFTWARE
+    }
+}
+
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        print_help();
+        return;
+    }
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        println!("brig-telegram {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
+
+    // Reject unknown flags
+    for arg in &args[1..] {
+        if arg.starts_with('-') {
+            eprintln!("unknown option: {}", arg);
+            eprintln!("try: brig-telegram --help");
+            process::exit(EX_USAGE);
+        }
+    }
+
     if let Err(e) = run() {
         eprintln!("fatal: {}", e);
-        process::exit(1);
+        process::exit(exit_code_for(&e));
     }
 }

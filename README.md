@@ -86,9 +86,11 @@ The gateway uses Brig's newline-delimited JSON protocol:
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `BRIG_TELEGRAM_TOKEN` | Yes | - | Telegram bot token from @BotFather |
-| `BRIG_SOCKET` | No | `/var/brig/sock/brig.sock` | Path to Brig's unix socket |
+| `BRIG_TOKEN` | Yes | - | Brig IPC authentication token (generate with `brig token create telegram-gateway`) |
+| `BRIG_SOCKET` | No | `~/.brig/sock/brig.sock` | Path to Brig's unix socket |
 | `BRIG_GATEWAY_NAME` | No | `telegram-gateway` | Gateway identity for brig (audit/logging) |
 | `BRIG_SESSION_PREFIX` | No | `tg` | Session key prefix (e.g., `tg-{chat_id}-{user_id}`) |
+| `BRIG_TELEGRAM_ALLOWED_USERS` | No | all users | Comma-separated Telegram user IDs to accept messages from |
 
 ## Running Multiple Bots
 
