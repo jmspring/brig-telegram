@@ -8,7 +8,7 @@ Brig's unix domain socket, waits for the LLM-driven response, and sends
 the result back to the Telegram chat.
 
 No async runtime, no Telegram bot framework. Synchronous HTTP via ureq
-and blocking socket I/O in ~350 lines.
+and blocking socket I/O in ~500 lines.
 
 ## Prerequisites
 
@@ -459,8 +459,13 @@ sudo cp target/release/brig-telegram /usr/local/bin/
 ### Register Each Bot as a Separate Skill
 
 ```sh
-brig skill add --manifest contrib/manifest-ops.toml
-brig skill add --manifest contrib/manifest-support.toml
+# Copy each manifest into its own skill directory
+mkdir -p /tmp/telegram-ops /tmp/telegram-support
+cp contrib/manifest-ops.toml /tmp/telegram-ops/manifest.toml
+cp contrib/manifest-support.toml /tmp/telegram-support/manifest.toml
+
+brig skill add /tmp/telegram-ops/
+brig skill add /tmp/telegram-support/
 ```
 
 ### Set Secrets for Each
