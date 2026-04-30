@@ -36,7 +36,7 @@ No async runtime. No Telegram bot framework.
 Newline-delimited JSON over unix domain socket:
 
 ```
-→ {"type":"hello","name":"telegram-gateway","version":"0.1.3"}
+→ {"type":"hello","name":"telegram-gateway","version":"0.2.0"}
 ← {"type":"welcome","capabilities":["submit_task","read_status"]}
 → {"type":"task","content":"user message","session":"tg-CHATID-USERID"}
 ← {"type":"status","skill":"shell","jail":"w-xxx","state":"running"}

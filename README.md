@@ -74,7 +74,7 @@ BRIG_SOCKET=/path/to/brig.sock \
 The gateway uses Brig's newline-delimited JSON protocol:
 
 ```
-→ {"type":"hello","name":"telegram-gateway","version":"0.1.3"}
+→ {"type":"hello","name":"telegram-gateway","version":"0.2.0"}
 ← {"type":"welcome","capabilities":["submit_task","read_status"]}
 → {"type":"task","content":"user message","session":"tg-12345-67890"}
 ← {"type":"status","skill":"shell","jail":"w-xxx","state":"running"}

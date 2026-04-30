@@ -205,14 +205,20 @@ BRIG_SOCKET="/path/to/brig.sock" \
 
 ### Environment Variables
 
-| Variable              | Required | Default                       | Description                    |
-|-----------------------|----------|-------------------------------|--------------------------------|
-| `BRIG_TELEGRAM_TOKEN` | Yes      | --                            | Bot token from @BotFather      |
-| `BRIG_SOCKET`         | No       | `/var/brig/sock/brig.sock`    | Path to Brig's unix socket     |
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `BRIG_TELEGRAM_TOKEN` | Yes | -- | Bot token from @BotFather |
+| `BRIG_TOKEN` | Yes | -- | Brig IPC authentication token (generate with `brig token create telegram-gateway`) |
+| `BRIG_SOCKET` | No | `~/.brig/sock/brig.sock` | Path to Brig's unix socket |
+| `BRIG_GATEWAY_NAME` | No | `telegram-gateway` | Gateway identity for brig (audit/logging) |
+| `BRIG_SESSION_PREFIX` | No | `tg` | Session key prefix (e.g., `tg-{chat_id}-{user_id}`) |
+| `BRIG_TELEGRAM_ALLOWED_USERS` | No | all users | Comma-separated Telegram user IDs to accept messages from. When unset, any Telegram user can interact with the bot -- set this in production to restrict access. |
 
 When installed as a persistent skill, `BRIG_TELEGRAM_TOKEN` is injected
-automatically from brig's secret store. Override `BRIG_SOCKET` only if
-your brig daemon uses a non-default socket path.
+automatically from brig's secret store. `BRIG_TOKEN` is required for
+socket authentication -- generate one with `brig token create telegram-gateway`
+and pass it via environment or secret store. Override `BRIG_SOCKET` only
+if your brig daemon uses a non-default socket path.
 
 ### Brig Daemon Configuration
 
