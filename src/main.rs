@@ -11,7 +11,6 @@ use std::os::unix::net::UnixStream;
 use std::process;
 use std::time::Duration;
 
-const DEFAULT_SOCKET: &str = "/var/brig/sock/brig.sock";
 const TELEGRAM_API: &str = "https://api.telegram.org";
 const POLL_TIMEOUT: u64 = 30;
 const TELEGRAM_MAX_LENGTH: usize = 4096;
@@ -367,7 +366,7 @@ fn run() -> Result<(), String> {
         if std::path::Path::new(&user_path).exists() {
             user_path
         } else {
-            DEFAULT_SOCKET.to_string()
+            "/var/brig/sock/brig.sock".to_string()
         }
     });
 
